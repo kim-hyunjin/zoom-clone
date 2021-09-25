@@ -17,11 +17,15 @@ app.get("/*", (req, res) => res.redirect("/"));
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
+const sockets = [];
+
 wss.on("connection", (socket) => {
   console.log("Connected to Browser ✅");
+  sockets.push(socket);
   socket.on("close", () => console.log("Disconnected from browser ❌"));
-  socket.on("message", (message) => console.log(message));
-  socket.send("hello!!");
+  socket.on("message", (message) => {
+    sockets.forEach((aSocket) => aSocket.send(message));
+  });
 });
 
 server.listen(3000, () => {
