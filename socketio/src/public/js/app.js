@@ -8,6 +8,11 @@ roomNameForm.addEventListener("submit", handleRoomSubmit);
 nickNameForm.addEventListener("submit", handleNicknameSubmit);
 function handleRoomSubmit(event) {
   event.preventDefault();
+  const nickname = nickNameForm.querySelector("input").value;
+  if (nickname === "") {
+    alert("닉네임을 먼저 입력해주세요!");
+    return;
+  }
   const input = roomNameForm.querySelector("input");
   // 첫번째는 이벤트명을 넣어준다.
   // 두번째 인자부터 다양한 타입의 데이터를 가변인자로 제한없이 보낼 수 있다.
@@ -29,8 +34,6 @@ room.hidden = true;
 function showRoom() {
   welcome.hidden = true;
   room.hidden = false;
-  const h3 = room.querySelector("h3");
-  h3.innerText = `Room ${roomName}`;
 
   const msgForm = room.querySelector("#msg");
   msgForm.addEventListener("submit", handleMessageSubmit);
@@ -53,12 +56,29 @@ function addMessage(message) {
   ul.appendChild(li);
 }
 
-socket.on("welcome", (user) => {
+function updateRoomTitle(roomName, userCount) {
+  const h3 = room.querySelector("h3");
+  h3.innerText = `Room ${roomName} (${userCount})`;
+}
+
+socket.on("welcome", (user, newUsersCount) => {
+  updateRoomTitle(user, newUsersCount);
   addMessage(`${user} joined!`);
 });
 
-socket.on("bye", (user) => {
+socket.on("bye", (user, newUsersCount) => {
+  updateRoomTitle(user, newUsersCount);
   addMessage(`${user} left!`);
 });
 
 socket.on("new_message", addMessage);
+
+socket.on("rooms_updated", (rooms) => {
+  const roomList = welcome.querySelector("ul");
+  roomList.innerHTML = "";
+  rooms.forEach((room) => {
+    const li = document.createElement("li");
+    li.innerText = room;
+    roomList.appendChild(li);
+  });
+});
