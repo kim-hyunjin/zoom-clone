@@ -17,11 +17,29 @@ const httpServer = http.createServer(app);
 const wsServer = new SocketIO(httpServer);
 
 wsServer.on("connection", (socket) => {
+  socket.onAny((event) => {
+    console.log(`Socket Event: ${event}`);
+  });
+
+  socket.on("disconnecting", () => {
+    socket.rooms.forEach((room) =>
+      socket.to(room).emit("bye", socket.nickname)
+    );
+  });
+
+  socket.on("nickname", (nickname) => {
+    socket["nickname"] = nickname;
+  });
+
   socket.on("enter_room", (roomName, done) => {
-    console.log(roomName);
-    setTimeout(() => {
-      done("hello from the backend!");
-    }, 10000);
+    socket.join(roomName);
+    done(); // 프론트엔드에서 실행됨
+    socket.to(roomName).emit("welcome", socket.nickname);
+  });
+
+  socket.on("new_message", (msg, room, done) => {
+    socket.to(room).emit("new_message", `${socket.nickname}: ${msg}`);
+    done();
   });
 });
 
