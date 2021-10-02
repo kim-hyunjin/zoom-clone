@@ -114,11 +114,46 @@ async function initCall() {
   makeConnection();
 }
 
+// RTC
+function makeConnection() {
+  myPeerConnection = new RTCPeerConnection({
+    // STUN(Session Traversal Utilities for NAT)서버를 사용해 핸드폰과 컴퓨터가 서로의 공용 IP를 찾을 수 있도록 설정하기
+    iceServers: [
+      {
+        urls: [
+          "stun:stun.l.google.com:19302",
+          "stun:stun1.l.google.com:19302",
+          "stun:stun2.l.google.com:19302",
+          "stun:stun3.l.google.com:19302",
+          "stun:stun4.l.google.com:19302",
+        ],
+      },
+    ], // 구글에서 제공하는 STUN서버 사용
+  });
+
+  // ice(연결 정보)가 만들어지면 peer에게 보낸다.
+  myPeerConnection.addEventListener("icecandidate", (data) => {
+    console.log("sent candidate");
+    socket.emit("ice", data.candidate, roomName);
+  });
+  // peer로부터 받은 data stream 핸들링
+  myPeerConnection.addEventListener("addstream", (data) => {
+    console.log("Peer's Stream", data.stream);
+    console.log("My Stream", myStream);
+    const peerFace = document.getElementById("peerFace");
+    peerFace.srcObject = data.stream;
+  });
+  myStream
+    .getTracks()
+    .forEach((track) => myPeerConnection.addTrack(track, myStream));
+}
+
 async function handleJoinRoom(e) {
   e.preventDefault();
   const input = welcomeForm.querySelector("input");
   await initCall();
   socket.emit("join_room", input.value);
+
   roomName = input.value;
   input.value = "";
 }
@@ -135,10 +170,12 @@ function handleSendMessage(data) {
 
 // 다른 브라우저가 접속하면 연결하기 위해 offer를 만들어 보내야 한다.
 async function handlePeerJoin() {
+  // peer가 room에 들어오면 data channel 생성
   myDataChannel = myPeerConnection.createDataChannel("chat");
   myDataChannel.addEventListener("message", handleIncomingMessage);
   console.log("made data channel");
 
+  // peer에게 연결을 위한 offer 보냄
   const offer = await myPeerConnection.createOffer();
   myPeerConnection.setLocalDescription(offer);
   console.log("sent the offer");
@@ -147,18 +184,23 @@ async function handlePeerJoin() {
 
 // 다른 브라우저로부터 offer가 오면 answer를 만들어 보낸다.
 async function handleIncomingOffer(offer) {
+  // peer가 만든 data channel 사용
   console.log("peer made datachannel");
   myPeerConnection.addEventListener("datachannel", (e) => {
     myDataChannel = e.channel;
     myDataChannel.addEventListener("message", handleIncomingMessage);
   });
 
+  // peer에게 answer 보내기
   console.log("receive offer", offer);
-  myPeerConnection.setRemoteDescription(offer);
+
+  myPeerConnection.setRemoteDescription(offer); // peer가 보낸 offer를 remote에 세팅
+
   const answer = await myPeerConnection.createAnswer();
-  myPeerConnection.setLocalDescription(answer);
-  console.log("sent the answer");
+  myPeerConnection.setLocalDescription(answer); // 내가 보낼 answer를 local로 세팅
   socket.emit("answer", answer, roomName);
+
+  console.log("sent the answer");
 }
 
 // socket.io 이벤트 핸들링
@@ -168,43 +210,12 @@ socket.on("offer", handleIncomingOffer);
 
 // 다른 브라우저로부터 answer가 오면 설정한다.
 socket.on("answer", (answer) => {
-  console.log("receive answer", answer);
+  console.log("received answer", answer);
   myPeerConnection.setRemoteDescription(answer);
 });
 
 // ICE (Internet Connectivity Establishment) - 연결 정보를 수신
 socket.on("ice", (ice) => {
-  console.log("received cadidate");
+  console.log("received ice cadidate");
   myPeerConnection.addIceCandidate(ice);
 });
-
-// RTC
-function makeConnection() {
-  // STUN(Session Traversal Utilities for NAT)서버를 사용해 핸드폰과 컴퓨터가 서로의 공용 IP를 찾을 수 있도록 설정하기
-  myPeerConnection = new RTCPeerConnection({
-    iceServers: [
-      {
-        urls: [
-          "stun:stun.l.google.com:19302",
-          "stun:stun1.l.google.com:19302",
-          "stun:stun2.l.google.com:19302",
-          "stun:stun3.l.google.com:19302",
-          "stun:stun4.l.google.com:19302",
-        ],
-      },
-    ], // 구글에서 제공하는 STUN서버 사용
-  });
-  myPeerConnection.addEventListener("icecandidate", (data) => {
-    console.log("sent candidate");
-    socket.emit("ice", data.candidate, roomName);
-  });
-  myPeerConnection.addEventListener("addstream", (data) => {
-    console.log("Peer's Stream", data.stream);
-    console.log("My Stream", myStream);
-    const peerFace = document.getElementById("peerFace");
-    peerFace.srcObject = data.stream;
-  });
-  myStream
-    .getTracks()
-    .forEach((track) => myPeerConnection.addTrack(track, myStream));
-}
