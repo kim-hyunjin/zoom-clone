@@ -123,10 +123,20 @@ async function handleJoinRoom(e) {
   input.value = "";
 }
 
+// TODO 메시지 화면에 뿌리기
+function handleIncomingMessage(event) {
+  console.log(event.data);
+}
+
+// TODO 화면에서 메시지 입력받아 peer에게 전송하기
+function handleSendMessage(data) {
+  myDataChannel.send(data);
+}
+
 // 다른 브라우저가 접속하면 연결하기 위해 offer를 만들어 보내야 한다.
 async function handlePeerJoin() {
   myDataChannel = myPeerConnection.createDataChannel("chat");
-  myDataChannel.addEventListener("message", (e) => console.log(e));
+  myDataChannel.addEventListener("message", handleIncomingMessage);
   console.log("made data channel");
 
   const offer = await myPeerConnection.createOffer();
@@ -137,12 +147,10 @@ async function handlePeerJoin() {
 
 // 다른 브라우저로부터 offer가 오면 answer를 만들어 보낸다.
 async function handleIncomingOffer(offer) {
+  console.log("peer made datachannel");
   myPeerConnection.addEventListener("datachannel", (e) => {
-    console.log(e);
     myDataChannel = e.channel;
-    myDataChannel.addEventListener("message", (e) => {
-      console.log(e.data);
-    });
+    myDataChannel.addEventListener("message", handleIncomingMessage);
   });
 
   console.log("receive offer", offer);
