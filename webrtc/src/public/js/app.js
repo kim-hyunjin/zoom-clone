@@ -5,7 +5,6 @@ const muteBtn = document.getElementById("mute");
 const cameraBtn = document.getElementById("camera");
 const cameraSelect = document.getElementById("cameras");
 const call = document.getElementById("call");
-
 call.hidden = true;
 
 let myStream;
@@ -13,6 +12,9 @@ let muted = false;
 let cameraOff = false;
 let roomName;
 let myPeerConnection;
+let myDataChannel;
+
+// video control
 
 async function getMedia(deviceId) {
   const initConfig = {
@@ -57,7 +59,7 @@ async function getCameraSelectOptions() {
   }
 }
 
-muteBtn.addEventListener("click", () => {
+function handleMuteBtn() {
   myStream
     .getAudioTracks()
     .forEach((track) => (track.enabled = !track.enabled));
@@ -68,9 +70,9 @@ muteBtn.addEventListener("click", () => {
     muteBtn.innerText = "Mute";
     muted = false;
   }
-});
+}
 
-cameraBtn.addEventListener("click", () => {
+function handleCameraSwitch() {
   myStream
     .getVideoTracks()
     .forEach((track) => (track.enabled = !track.enabled));
@@ -81,9 +83,7 @@ cameraBtn.addEventListener("click", () => {
     cameraBtn.innerText = "Turn Camera On";
     cameraOff = true;
   }
-});
-
-cameraSelect.addEventListener("input", handleCameraChange);
+}
 
 async function handleCameraChange() {
   await getMedia(cameraSelect.value);
@@ -97,8 +97,15 @@ async function handleCameraChange() {
   }
 }
 
+muteBtn.addEventListener("click", handleMuteBtn);
+cameraBtn.addEventListener("click", handleCameraSwitch);
+cameraSelect.addEventListener("input", handleCameraChange);
+
+// welcome
+
 const welcome = document.getElementById("welcome");
 const welcomeForm = welcome.querySelector("form");
+welcomeForm.addEventListener("submit", handleJoinRoom);
 
 async function initCall() {
   welcome.hidden = true;
@@ -107,32 +114,49 @@ async function initCall() {
   makeConnection();
 }
 
-welcomeForm.addEventListener("submit", async (e) => {
+async function handleJoinRoom(e) {
   e.preventDefault();
   const input = welcomeForm.querySelector("input");
   await initCall();
   socket.emit("join_room", input.value);
   roomName = input.value;
   input.value = "";
-});
+}
 
 // 다른 브라우저가 접속하면 연결하기 위해 offer를 만들어 보내야 한다.
-socket.on("welcome", async () => {
+async function handlePeerJoin() {
+  myDataChannel = myPeerConnection.createDataChannel("chat");
+  myDataChannel.addEventListener("message", (e) => console.log(e));
+  console.log("made data channel");
+
   const offer = await myPeerConnection.createOffer();
   myPeerConnection.setLocalDescription(offer);
   console.log("sent the offer");
   socket.emit("offer", offer, roomName);
-});
+}
 
 // 다른 브라우저로부터 offer가 오면 answer를 만들어 보낸다.
-socket.on("offer", async (offer) => {
+async function handleIncomingOffer(offer) {
+  myPeerConnection.addEventListener("datachannel", (e) => {
+    console.log(e);
+    myDataChannel = e.channel;
+    myDataChannel.addEventListener("message", (e) => {
+      console.log(e.data);
+    });
+  });
+
   console.log("receive offer", offer);
   myPeerConnection.setRemoteDescription(offer);
   const answer = await myPeerConnection.createAnswer();
   myPeerConnection.setLocalDescription(answer);
   console.log("sent the answer");
   socket.emit("answer", answer, roomName);
-});
+}
+
+// socket.io 이벤트 핸들링
+
+socket.on("welcome", handlePeerJoin);
+socket.on("offer", handleIncomingOffer);
 
 // 다른 브라우저로부터 answer가 오면 설정한다.
 socket.on("answer", (answer) => {
@@ -140,6 +164,7 @@ socket.on("answer", (answer) => {
   myPeerConnection.setRemoteDescription(answer);
 });
 
+// ICE (Internet Connectivity Establishment) - 연결 정보를 수신
 socket.on("ice", (ice) => {
   console.log("received cadidate");
   myPeerConnection.addIceCandidate(ice);
